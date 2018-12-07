@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Text Fingerprinting, Ursula Alwang</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+
+
+    <style type="text/css">
+
+    </style>
+</head>
+<body>
+    <h1>Literature Fingerprints</h1>
+    <p>Welcome to Ursula's Visualization. Click on a Fingerprint to Remove it.
+    </p>
+    <input type="file" id="files" name="files[]" multiple />
+
+    <select id="fingerprint_type">
+        <option value="avg_length">Average word length</option>
+        <option value="unique">Hapax Legomena</option>
+    </select>
+
+
+    <svg id="key"></svg>
+
+    <script>
+
+        // constant to determine how the file gets segmented
+        // to make your lives a little easier, we wil keep a fixed block size
+        // if you want a challenge, add a control and let the user change this on the fly...
+        const margins = {top:40, bottom:10, left:10, right:10};
+        const WORDS_PER_BLOCK = 200;
+        const WIDTH = 600;
+        const HEIGHT = 200;
+        const SQUARE = 15;
+        const PER_ROW = WIDTH/SQUARE;
+        let unique_id = 0;
+        let unique_color = [];
+        let length_color = [];
+
+        const key =  d3.select("#key")
+          .attr("width", 400)
+          .attr("height", 100)
+
+        const svg = key.append("g")
+              .attr("transform", `translate(${margins.left}, ${margins.top})`);
+
+        //color scale for the length fingerprints
+        const color_scale = d3.scaleLinear()
+          .range(["green", "white", "purple"]);
+
+        const key_scale = d3.scaleLinear()
+          .range([20, 170, 320])
+          .domain([0, 2.5, 5]);
+
+        const x_axis = svg.append("g")
+            .attr("transform", "translate(0," + (10) + ")")
+            .attr("class", "x_axis")
+            .call(d3.axisBottom(key_scale));
+
+        const grid_scale = d3.scaleLinear()
+          .domain([0, WIDTH/SQUARE])
+          .range([0, WIDTH])
+
+      //---------Key-----------
+        svg.append("defs")
+          .append("linearGradient")
+          .attr("id", "linear-gradient")
+          .attr("x1", "0%").attr("y1", "0%")
+          .attr("x2", "100%").attr("y2", "0%")
+          .selectAll("stop").data(color_scale.range())
+          .enter().append("stop")
+          .attr("offset", (d,i)=> i/(color_scale.range().length-1))
+          .attr("stop-color", (d)=>d);
+
+        svg.append("rect")
+          .attr("class", "key_rect")
+          .attr("x", 20)
+          .attr("y", 0)
+          .attr("width", 300)
+          .attr("height", 10)
+          .style("stoke", "black")
+          .style("fill", "url(#linear-gradient)");
+
+        svg.append("text")
+          .attr("class", "key_title")
+          .attr("x", 0)
+          .attr("y", -5)
+          .style("text-anchor", "middle")
+
+        svg.append("text")
+        	.attr("class", "legendTitle")
+        	.attr("x", 100)
+        	.attr("y", -10)
+        	.style("text-anchor", "middle")
+
+      const update_axis = function(type) {
+        //set the key scale = to the color scale
+        key_scale.domain(color_scale.domain());
+        //redraw the axis with a smooth transition
+        svg.selectAll(".x_axis").transition()
+          .duration(1500)
+          .call(d3.axisBottom(key_scale));
+
+        let metric = "Average";
+        if (type == "avg_length") {
+          metric = "Average Length of a Segment"
+        }
+        else {
+          metric = "Hapax Legomena of a Segment"
+        }
+        svg.select(".legendTitle").transition()
+          .text(metric);
+      }
+
+
+        var master_file_list = [];
+
+        const update_scale = function(type) {
+          //updates the domain for the color scale based on only the files that are in master_file_list
+          console.log("type");
+          console.log(type);
+
+          let unique_color = [];
+          let length_color = [];
+
+          for (i = 0; i < master_file_list.length; i++) {
+            //go through every file in the list
+            length_color.push(master_file_list[i].l_metric[0])
+            length_color.push(master_file_list[i].l_metric[2])
+
+            unique_color.push(master_file_list[i].u_metric[0])
+            unique_color.push(master_file_list[i].u_metric[2])
+
+          }
+          if (type == "avg_length"){
+            let min = d3.min(length_color);
+            let max = d3.max(length_color);
+            let mid = ((min + max) / 2);
+            color_scale.domain([min, mid, max]);
+
+            }
+          if (type == "unique"){
+            let min = d3.min(unique_color);
+            let max = d3.max(unique_color);
+            let mid = ((min + max) / 2);
+            color_scale.domain([min, mid, max]);
+            }
+        }
+
+        const find_length = function(arr){
+          //takes in an array of words, returns the average word length
+
+          let average = 0;
+          for (i = 0; i < arr.length; i++) {
+            //console.log(arr[i])
+            let new_ave = arr[i].length;
+            average = average + new_ave;
+          }
+          average = average/WORDS_PER_BLOCK;
+          //console.log(average);
+          return average;
+        }
+
+        const find_unique = function(unique_words, seg ){
+          //finds the count of unique values in a given segment, returns the count of all unique words
+          var count = 0;
+          for (i = 0; i < WORDS_PER_BLOCK; i++) {
+            if (unique_words.includes(seg[i]))
+              count++;
+          }
+          return count;
+        }
+
+
+        const update_visualization = function(){
+            // what kind of fingerprinting are we doing?
+
+
+            const fingerprint_type = document.getElementById('fingerprint_type').value;
+
+            let books = d3.selectAll(".container").data(master_file_list, (d)=>d.id)
+
+            //remove the books that the user clicked on
+            books.exit().remove()
+
+            //make div containing h2 + SVG
+            const new_books = books.enter().append("div")
+              .attr("class","container")
+              .insert("h2")
+                .text((d)=>d.name)
+              .append("svg")
+                .attr("width", WIDTH)
+                .attr("height", HEIGHT)
+                //remove the fingerprints on a click
+                .on("click", function(item_data) {
+                  master_file_list = master_file_list.filter((d)=>d != item_data);c
+                  update_visualization();
+              });
+
+            books = books.merge(new_books);
+
+            update_scale(fingerprint_type);
+            update_axis(fingerprint_type);
+
+            let number = 0;
+            if (fingerprint_type == "avg_length") {
+              number = 0;
+            } else {
+              number = 1;
+            }
+
+            console.log(number)
+            let rects = books.selectAll(".rect").data((d)=>d.data_arr[number])
+
+            rects.exit().remove()
+            //add all the rectangles
+
+              //console.log(rects);
+            const new_rects = rects.enter().append("rect")
+            .attr("class", "rect")
+            .attr("x", (d,i)=> grid_scale(i % PER_ROW))
+            .attr("y", (d,i)=> grid_scale(Math.floor(i / PER_ROW)))
+            .attr("width", SQUARE)
+            .attr("height", SQUARE)
+            .style("fill", (d)=>color_scale(d))
+            .style("stroke", "black")
+
+            rects = rects.merge(new_rects);
+
+            rects.transition()
+              .duration(750)
+              .style("fill", (d)=>color_scale(d))
+
+
+
+        };
+
+        /*
+            The bundleTextData function takes in a name and the contents of the associated file. The function should process the text and return an object containing (at minimum), the name of a file, and a list of segment values for each metric.
+        */
+
+        const process_text_data = function(file_name, contents){
+          //stakes in a single string, returns object
+
+          var words = contents.split(/\s+/);
+          words = words.map((d)=>d.replace(/(^(\W|\d)+|\W+$)/g, "").toLowerCase())
+
+          var segment = [] //holds the words of a segment
+
+          var ave_obj = [] //holds the averages of every segment
+          var ave_metric = [] //holds the min, median, max of the length of the file
+
+          //find all the unique words using filtering. If the only index of the word is the current index, it's unique. Technique used from second answer in:  https://stackoverflow.com/questions/11246758/how-to-get-unique-values-in-an-array
+
+          var unique_list = words.filter((d, i, w)=> w.indexOf(d) == i && w.lastIndexOf(d) == i);
+
+          var unique_obj = [] //holds the count of unique words in every segment
+          var unique_metric= [] //holds the min, median and max count
+
+          //go through all the words in 200 sized blocks
+          for (let i = 0; i< words.length; i = i + 200) {
+
+              for (j = 0; j <WORDS_PER_BLOCK && j+i < words.length; j++) {
+                segment[j] = words[i+j]
+              }
+            ave_obj.push(find_length(segment));
+            unique_obj.push(find_unique(unique_list, segment))
+          }
+
+          //push these into our domain arrays
+
+          ave_metric[0] = d3.min(ave_obj)
+          ave_metric[2] = d3.max(ave_obj)
+
+          unique_metric[0] = d3.min(unique_obj)
+          unique_metric[2] = d3.max(unique_obj)
+
+
+          console.log(unique_metric);
+          console.log(unique_obj);
+
+          var file = {name: file_name,
+                    data_arr: [ave_obj, unique_obj],
+                    l_metric: ave_metric,
+                    u_metric: unique_metric,
+                    id: unique_id}
+
+          unique_id++;
+          return file;
+
+        };
+        /*
+            This function does the voodoo of "uploading" the files into the browser. You don't need to know exactly what is going on in here. The important parts are that when the user selects multiple files, this will read those files in, passing each one to process_text_data() for you to process. When they have all been processed, it will then call drawTextVis() with a list of all of the objects you produced in the process_text_data() function.
+        */
+        const handle_file_select = function(evt) {
+        const files = evt.target.files; // FileList object
+
+        const load_list = [];
+
+        for (let i = 0, f; f = files[i]; i++) {
+            const p = new Promise(function(resolve, reject){
+            const reader = new FileReader();
+
+            reader.onload = function(file_data){
+                return (event) => resolve(process_text_data(file_data.name, event.target.result));
+                }(f);
+            reader.readAsText(f);
+
+            });
+            load_list.push(p);
+        }
+
+        Promise.all(load_list).then(function(processed_records){
+            for (let i =0; i < processed_records.length; i++){
+                master_file_list.push(processed_records[i]);
+            }
+
+            update_visualization();
+        });
+
+        };
+
+    // add the event listener for the file addition button
+    document.getElementById('files').addEventListener('change', handle_file_select, false);
+
+    // add the event listener for changing the fingerprint type
+    document.getElementById('fingerprint_type').addEventListener('change', function(event){
+        update_visualization();
+
+    });
+
+    </script>
+</body>
+</html>
