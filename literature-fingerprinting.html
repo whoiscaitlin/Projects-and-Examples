@@ -5,7 +5,7 @@
     <title>Text Fingerprinting, Ursula Alwang</title>
     <script src="https://d3js.org/d3.v5.min.js"></script>
 
-
+    <!-- A page that shows two types of Literature Fingerprinting for .txt files. Done in Octrober 2018 for Information Visualization
     <style type="text/css">
 
     </style>
@@ -25,10 +25,10 @@
     <svg id="key"></svg>
 
     <script>
-
+       
         // constant to determine how the file gets segmented
-        // to make your lives a little easier, we wil keep a fixed block size
-        // if you want a challenge, add a control and let the user change this on the fly...
+        // to make things a little easier, we wil keep a fixed block size
+        // if you want a challenge, add a control and let the user change this on the fly
         const margins = {top:40, bottom:10, left:10, right:10};
         const WORDS_PER_BLOCK = 200;
         const WIDTH = 600;
@@ -292,7 +292,10 @@
 
         };
         /*
-            This function does the voodoo of "uploading" the files into the browser. You don't need to know exactly what is going on in here. The important parts are that when the user selects multiple files, this will read those files in, passing each one to process_text_data() for you to process. When they have all been processed, it will then call drawTextVis() with a list of all of the objects you produced in the process_text_data() function.
+           `when the user selects multiple files, 
+            this will read those files in, passing each one to process_text_data() 
+            When they have all been processed, 
+            it will then call drawTextVis() with a list of all of the objects produced in the process_text_data() function.
         */
         const handle_file_select = function(evt) {
         const files = evt.target.files; // FileList object
